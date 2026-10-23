@@ -2,769 +2,279 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Policy Check Monitor</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<meta name="description" content="Reads motor insurance policy PDFs and shows a workshop claims desk what is covered before the repair starts: betterment, excess, flood, windscreen, dates.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
 <style>
+/* Layout: split hero (promise left, a live-looking claim card right), then checks grid, betterment scale strip, three steps, privacy band. */
 :root{
-  --bg:#f5f6f8; --panel:#ffffff; --ink:#1b2430; --muted:#5d6878; --line:#dfe3e9;
-  --accent:#1f4e8c; --accent-ink:#ffffff;
-  --red:#b42318; --red-bg:#fdecea; --amber:#9a5b00; --amber-bg:#fff4e0;
-  --green:#1e7a3c; --green-bg:#e7f5ec; --info:#3b5b85; --info-bg:#eaf0f8;
+  --bg:#f6f7f9; --surface:#ffffff; --ink:#14202e; --muted:#566476; --line:#dde2e9;
+  --accent:#1d4f91; --accent-ink:#ffffff; --accent-soft:#e6eef8;
+  --ok:#1e7a3c; --ok-bg:#e7f5ec; --bad:#b42318; --bad-bg:#fdecea; --warn:#9a5b00; --warn-bg:#fff4e0;
+  --display:"Archivo","Arial Narrow",Arial,sans-serif;
+  --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",Consolas,monospace;
+  color-scheme:light;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#13171d; --panel:#1b2129; --ink:#e6eaf0; --muted:#9aa5b4; --line:#2c3440;
-    --accent:#6ea0e6; --accent-ink:#0d1117;
-    --red:#ff8a80; --red-bg:#3a1d1b; --amber:#f2b25c; --amber-bg:#3a2c14;
-    --green:#6fd08f; --green-bg:#163322; --info:#9fbde6; --info-bg:#1c2a3d;
+    --bg:#10161e; --surface:#18212c; --ink:#e7ecf2; --muted:#9daabb; --line:#2a3542;
+    --accent:#7aa8e8; --accent-ink:#0c1520; --accent-soft:#1c2b40;
+    --ok:#6fd08f; --ok-bg:#15301f; --bad:#ff8a80; --bad-bg:#3a1d1b; --warn:#f2b25c; --warn-bg:#3a2c14;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#13171d; --panel:#1b2129; --ink:#e6eaf0; --muted:#9aa5b4; --line:#2c3440;
-  --accent:#6ea0e6; --accent-ink:#0d1117;
-  --red:#ff8a80; --red-bg:#3a1d1b; --amber:#f2b25c; --amber-bg:#3a2c14;
-  --green:#6fd08f; --green-bg:#163322; --info:#9fbde6; --info-bg:#1c2a3d;
+  --bg:#10161e; --surface:#18212c; --ink:#e7ecf2; --muted:#9daabb; --line:#2a3542;
+  --accent:#7aa8e8; --accent-ink:#0c1520; --accent-soft:#1c2b40;
+  --ok:#6fd08f; --ok-bg:#15301f; --bad:#ff8a80; --bad-bg:#3a1d1b; --warn:#f2b25c; --warn-bg:#3a2c14;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
-header{background:var(--panel);border-bottom:1px solid var(--line);padding-block:14px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
-h1{font-size:18px;margin:0}
-h2{font-size:15px;margin:0 0 10px}
-.sub{color:var(--muted);font-size:12.5px}
-main{max-width:1180px;margin:0 auto;padding-block:16px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
-.brief-view{border:1px solid var(--line);border-radius:6px;background:#fff;max-height:760px;overflow:auto}
-.online-only{display:none}
-.is-online .online-only{display:block}
-.is-online .local-only{display:none!important}
-.bar{display:flex;flex-wrap:wrap;gap:8px}
-button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:6px;cursor:pointer}
-button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-button:disabled{opacity:.5;cursor:not-allowed}
-button.small{padding:3px 8px;font-size:12.5px}
-section.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px}
-.status-line{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--muted)}
-.status-line b{color:var(--ink)}
-.drop{border:2px dashed var(--line);border-radius:8px;padding:14px;text-align:center;color:var(--muted);margin-top:12px}
-.drop.over{border-color:var(--accent);color:var(--accent)}
-.card{border:1px solid var(--line);border-radius:8px;margin-bottom:14px;overflow:hidden}
-.card-head{padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
-.card-head .t{font-weight:600}
-.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px 16px;padding:12px 14px;border-bottom:1px solid var(--line)}
-.facts div span{display:block;color:var(--muted);font-size:12px}
-table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:12px;color:var(--muted);font-weight:600}
-.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;white-space:nowrap}
-.pill.flag{color:var(--red);background:var(--red-bg)}
-.pill.check{color:var(--amber);background:var(--amber-bg)}
-.pill.ok{color:var(--green);background:var(--green-bg)}
-.pill.info{color:var(--info);background:var(--info-bg)}
-details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
-.ev{font-size:12px;color:var(--muted);margin:4px 0 0;padding-left:8px;border-left:2px solid var(--line)}
-.decided{font-size:12px;color:var(--muted)}
-.empty{color:var(--muted);padding:8px 0}
-.log td{font-size:12.5px}
-.scroll{overflow-x:auto}
-.banner{padding:10px 12px;border-radius:6px;background:var(--amber-bg);color:var(--amber);margin-bottom:12px;display:none}
-dialog{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);max-width:560px;width:calc(100% - 32px)}
-dialog label{display:block;margin:8px 0}
-input[type=text],input[type=number]{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink)}
-.toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom, 0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;display:none;max-width:90%}
-.ess{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
-.ess-h{padding:10px 14px 0;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)}
-.tile{border:1px solid var(--line);border-left-width:5px;border-radius:6px;padding:8px 10px}
-.tile .l{font-size:12px;color:var(--muted)}
-.tile .v{font-size:16px;font-weight:700;margin:2px 0}
-.tile .n{font-size:12px;color:var(--muted)}
-.tile.good{border-left-color:var(--green)} .tile.good .v{color:var(--green)}
-.tile.bad{border-left-color:var(--red);background:var(--red-bg)} .tile.bad .v{color:var(--red)}
-.tile.warn{border-left-color:var(--amber);background:var(--amber-bg)} .tile.warn .v{color:var(--amber)}
-.tile.neutral{border-left-color:var(--info)}
-@media (max-width:640px){main{padding-block:10px}header{padding-block:12px}}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--body)}
+a{color:var(--accent)}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(20px, env(safe-area-inset-left, 0px));padding-right:max(20px, env(safe-area-inset-right, 0px))}
+h1,h2,h3{font-family:var(--display);line-height:1.12;text-wrap:balance;margin:0}
+h1{font-size:clamp(2.1rem, 4.6vw, 3.4rem);font-weight:800;letter-spacing:-.015em}
+h2{font-size:clamp(1.5rem, 2.6vw, 2.1rem);font-weight:800;letter-spacing:-.01em}
+h3{font-size:1.08rem;font-weight:700}
+p{margin:0}
+.eyebrow{font:600 .78rem/1 var(--body);text-transform:uppercase;letter-spacing:.12em;color:var(--accent)}
+.lede{color:var(--muted);font-size:1.12rem;max-width:34em}
+section{padding-block:72px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:4px}
+
+/* Top bar */
+.top{border-bottom:1px solid var(--line);background:var(--surface)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-block:14px}
+.brand{display:flex;align-items:center;gap:10px;font:800 1.02rem var(--display);color:var(--ink);text-decoration:none}
+.brand svg{flex:none}
+.top nav{display:flex;gap:18px;font-size:.95rem}
+.top nav a{color:var(--muted);text-decoration:none}
+.top nav a:hover{color:var(--ink)}
+
+/* Buttons */
+.btns{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;font:700 1rem var(--display);padding:13px 22px;border-radius:8px;text-decoration:none;border:1.5px solid var(--accent);transition:transform .15s ease, background .15s ease}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{color:var(--accent);background:transparent}
+.btn:hover{transform:translateY(-1px)}
+.note{font-size:.88rem;color:var(--muted)}
+
+/* Hero */
+.hero{padding-block:64px 56px}
+.hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.hero-copy{display:grid;gap:22px;min-width:0}
+.claim{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 40px -24px rgba(20,32,46,.35);overflow:hidden;min-width:0}
+.claim-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.claim-head b{font-family:var(--display)}
+.tag{font:600 .7rem/1 var(--body);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:4px 6px}
+.claim-label{padding:12px 18px 0;font:700 .72rem var(--body);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 18px 18px}
+.tile{border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:6px;padding:9px 11px;min-width:0}
+.tile .l{font-size:.76rem;color:var(--muted)}
+.tile .v{font:700 1.02rem/1.25 var(--display)}
+.tile .n{font-size:.76rem;color:var(--muted);line-height:1.35;margin-top:2px}
+.tile.ok{border-left-color:var(--ok)} .tile.ok .v{color:var(--ok)}
+.tile.bad{border-left-color:var(--bad);background:var(--bad-bg)} .tile.bad .v{color:var(--bad)}
+.tile.warn{border-left-color:var(--warn);background:var(--warn-bg)} .tile.warn .v{color:var(--warn)}
+.mono{font-family:var(--mono);font-size:.92em}
+
+/* Checks */
+.head{display:grid;gap:12px;margin-bottom:34px;max-width:40em}
+.checks{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.check{background:var(--surface);padding:20px;display:grid;gap:6px;align-content:start}
+.check p{color:var(--muted);font-size:.95rem;line-height:1.5}
+.rule{font:600 .72rem var(--body);text-transform:uppercase;letter-spacing:.08em}
+.rule.must{color:var(--ok)} .rule.never{color:var(--bad)} .rule.match{color:var(--accent)}
+
+/* Betterment scale */
+.scale-band{background:var(--surface);border-block:1px solid var(--line)}
+.scale-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:center}
+.scale{display:grid;gap:8px;min-width:0}
+.bar{display:grid;grid-template-columns:4.6rem 1fr 3rem;gap:12px;align-items:center;font-variant-numeric:tabular-nums}
+.bar .age{font-size:.92rem;color:var(--muted)}
+.bar .track{height:14px;background:var(--accent-soft);border-radius:3px;overflow:hidden}
+.bar .fill{height:100%;background:var(--bad);border-radius:3px}
+.bar .pct{font:700 .95rem var(--display);text-align:right}
+.bar.zero .fill{background:var(--ok)}
+
+/* Steps */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;counter-reset:s}
+.step{display:grid;gap:10px;align-content:start;padding-top:18px;border-top:3px solid var(--ink)}
+.step::before{counter-increment:s;content:"Step " counter(s);font:700 .78rem var(--body);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}
+.step p{color:var(--muted)}
+
+/* Privacy */
+.privacy{background:var(--accent);color:var(--accent-ink)}
+.privacy .wrap{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+.privacy h2{color:var(--accent-ink)}
+.privacy ul{margin:0;padding-left:1.1em;display:grid;gap:10px}
+.privacy p{opacity:.9}
+
+/* Final CTA + footer */
+.cta{text-align:left}
+.cta .box{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:24px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:32px}
+footer{border-top:1px solid var(--line);padding-block:28px;color:var(--muted);font-size:.9rem}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
+
+@media (max-width:900px){
+  .hero .wrap,.scale-grid,.privacy .wrap{grid-template-columns:1fr;gap:36px}
+  .checks{grid-template-columns:1fr 1fr}
+  .steps{grid-template-columns:1fr}
+}
+@media (max-width:520px){
+  body{font-size:16px}
+  section{padding-block:52px}
+  .top nav{display:none}
+  .checks{grid-template-columns:1fr}
+  .tiles{grid-template-columns:1fr}
+  .cta .box{padding:22px}
+}
+@media (prefers-reduced-motion: reduce){ .btn{transition:none} .btn:hover{transform:none} }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>Policy Check Monitor</h1>
-    <div class="sub">Checks every new motor policy PDF, highlights what matters for workshop claims, and writes the briefing automatically.</div>
-  </div>
-  <div class="bar">
-    <button class="primary local-only" id="btnConnect">Connect Policy Inbox folder</button>
-    <button class="local-only" id="btnRun">Check inbox now</button>
-    <button id="btnAdd">Add PDFs manually</button>
-    <button id="btnSettings">Settings</button>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Policy Check Monitor home">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M13 2 4 5.5v6.8c0 5.6 3.8 10 9 11.7 5.2-1.7 9-6.1 9-11.7V5.5z" fill="var(--accent)"/><path d="m8.5 13.2 3.1 3.1 5.9-6.3" fill="none" stroke="var(--accent-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Policy Check Monitor
+    </a>
+    <nav aria-label="Page sections">
+      <a href="#checks">What it checks</a>
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+    </nav>
   </div>
 </header>
+
 <main>
-  <div class="banner" id="banner"></div>
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <span class="eyebrow">For motor workshop claims desks</span>
+        <h1>Know what the policy covers before the car goes on the lift.</h1>
+        <p class="lede">Drop in the customer's insurance policy PDF. Policy Check Monitor reads every page and shows what matters for the claim: betterment, excess, flood cover, windscreen, drivers and dates. Gaps and mismatches are flagged in red.</p>
+        <div class="btns">
+          <a class="btn primary" href="Policy%20Check%20Monitor.html">Open the app
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          <a class="btn ghost" href="#how">See how it works</a>
+        </div>
+        <p class="note">Free. Runs in Microsoft Edge or Google Chrome. Nothing to install, no sign-in.</p>
+      </div>
 
-  <section class="panel">
-    <h2>Status</h2>
-    <div class="sub online-only" style="margin-bottom:8px">Online version: add policy PDFs with <b>Add PDFs manually</b> or drop them below. They are read inside your browser and never uploaded. Folder watching and auto-saved briefings need the desktop copy of this app.</div>
-    <div class="status-line" id="statusLine"></div>
-    <div class="drop" id="drop">Drop policy PDFs here</div>
-    <input type="file" id="filePick" accept="application/pdf,.pdf" multiple hidden>
-  </section>
-
-  <section class="panel">
-    <h2>Checked policies</h2>
-    <div class="sub" style="margin-bottom:10px">Newest first. <b>Claim essentials</b> at the top of each policy show what the workshop needs before starting a claim.</div>
-    <div id="queue"></div>
-  </section>
-
-  <section class="panel">
-    <h2>Briefing</h2>
-    <div class="bar" style="margin-bottom:10px">
-      <button id="btnPreview">Rebuild briefing (all listed policies)</button>
-      <button class="local-only" id="btnPrint" disabled>Print / Save as PDF</button>
-      <button id="btnDownload" disabled>Download briefing</button>
+      <figure class="claim" style="margin:0" aria-label="Example of the claim essentials the app shows">
+        <div class="claim-head"><b>Honda City 1.5 · <span class="mono">WXY 1234</span></b><span class="tag">Example</span></div>
+        <div class="claim-label">Claim essentials</div>
+        <div class="tiles">
+          <div class="tile ok"><div class="l">Cover type</div><div class="v">Comprehensive</div><div class="n">Own-damage repair claim allowed</div></div>
+          <div class="tile bad"><div class="l">Betterment</div><div class="v">Not waived: ~20% of parts</div><div class="n">Car is 6 years old (2020)</div></div>
+          <div class="tile ok"><div class="l">Excess customer pays</div><div class="v">RM 0.00</div><div class="n">No voluntary excess</div></div>
+          <div class="tile bad"><div class="l">Flood / special perils</div><div class="v">Not covered</div><div class="n">Flood damage not claimable</div></div>
+          <div class="tile ok"><div class="l">Windscreen</div><div class="v">RM 2,000.00</div><div class="n">Doesn't affect NCD</div></div>
+          <div class="tile warn"><div class="l">Period of cover</div><div class="v">Dates differ</div><div class="n">Debit note disagrees with schedule</div></div>
+        </div>
+      </figure>
     </div>
-    <div class="sub" id="briefNote">A briefing is written automatically after every check<span class="local-only"> and saved in the inbox's "Briefings" folder</span>. Nothing is ever sent to anyone; you share it yourself.</div>
-    <div id="briefWrap" style="margin-top:10px" hidden><div class="brief-view" id="briefView"></div></div>
   </section>
 
-  <section class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h2>Run log</h2>
-      <button class="small" id="btnExportLog">Export log (CSV)</button>
+  <section id="checks">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">What it checks</span>
+        <h2>Every policy, against the same checklist</h2>
+        <p class="lede">The app reads the schedule, certificate, endorsement and debit note together, so it catches what one page alone won't show.</p>
+      </div>
+      <div class="checks">
+        <div class="check"><span class="rule must">Must be present</span><h3>Waive Betterment</h3><p>Without it, the customer pays part of the cost of new parts on an older car.</p></div>
+        <div class="check"><span class="rule never">Must be absent or RM 0</span><h3>Voluntary Excess</h3><p>Flags any voluntary excess the customer agreed to for a lower premium.</p></div>
+        <div class="check"><span class="rule must">Must be present</span><h3>Windscreen</h3><p>Shows the windscreen limit written on the schedule.</p></div>
+        <div class="check"><span class="rule must">Must be present</span><h3>Special Perils</h3><p>Flood, storm and landslide damage, which basic comprehensive cover leaves out.</p></div>
+        <div class="check"><span class="rule must">Must be present</span><h3>SRCC</h3><p>Strike, riot and civil commotion damage.</p></div>
+        <div class="check"><span class="rule must">Must be present</span><h3>LLP and LLAN</h3><p>Legal liability to passengers, and of passengers for negligent acts.</p></div>
+        <div class="check"><span class="rule match">Must agree on every page</span><h3>Premium and tax</h3><p>Premium + service tax + stamp duty must equal the total, everywhere it appears.</p></div>
+        <div class="check"><span class="rule match">Must agree on every page</span><h3>Cover dates</h3><p>Effective and expiry dates compared across all documents, with an expiry warning.</p></div>
+      </div>
     </div>
-    <div class="scroll"><table class="log"><thead><tr><th>When</th><th>Run</th><th>Action</th><th>File</th><th>Detail</th></tr></thead><tbody id="logBody"></tbody></table></div>
   </section>
 
-  <section class="panel">
-    <h2>Briefing history</h2>
-    <div id="history"></div>
+  <section class="scale-band">
+    <div class="wrap scale-grid">
+      <div class="head" style="margin:0">
+        <span class="eyebrow">Why betterment matters</span>
+        <h2>On a 7-year-old car, the customer can owe a quarter of the parts bill</h2>
+        <p class="lede">Unless betterment is waived, the insurer deducts part of the cost of new parts on vehicles 5 years and older. The app works out the car's age from the policy and estimates the share before you quote.</p>
+      </div>
+      <div class="scale" role="table" aria-label="Standard betterment scale by vehicle age">
+        <div class="bar zero" role="row"><span class="age" role="cell">Under 5 yrs</span><span class="track" role="cell"><span class="fill" style="display:block;width:2%"></span></span><span class="pct" role="cell">0%</span></div>
+        <div class="bar" role="row"><span class="age" role="cell">5 years</span><span class="track" role="cell"><span class="fill" style="display:block;width:37.5%"></span></span><span class="pct" role="cell">15%</span></div>
+        <div class="bar" role="row"><span class="age" role="cell">6 years</span><span class="track" role="cell"><span class="fill" style="display:block;width:50%"></span></span><span class="pct" role="cell">20%</span></div>
+        <div class="bar" role="row"><span class="age" role="cell">7 years</span><span class="track" role="cell"><span class="fill" style="display:block;width:62.5%"></span></span><span class="pct" role="cell">25%</span></div>
+        <div class="bar" role="row"><span class="age" role="cell">8 years</span><span class="track" role="cell"><span class="fill" style="display:block;width:75%"></span></span><span class="pct" role="cell">30%</span></div>
+        <div class="bar" role="row"><span class="age" role="cell">9 years</span><span class="track" role="cell"><span class="fill" style="display:block;width:87.5%"></span></span><span class="pct" role="cell">35%</span></div>
+        <div class="bar" role="row"><span class="age" role="cell">10+ years</span><span class="track" role="cell"><span class="fill" style="display:block;width:100%"></span></span><span class="pct" role="cell">40%</span></div>
+        <p class="note" style="margin-top:6px">Standard Malaysian scale; the insurer's adjuster has the final say.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">How it works</span>
+        <h2>Set it up once, then just read the results</h2>
+      </div>
+      <div class="steps">
+        <div class="step"><h3>Connect your Policy Inbox</h3><p>Pick the folder where agents' policy PDFs are saved. The app checks it when opened and every 30 minutes after that. You can also drop PDFs straight onto the page.</p></div>
+        <div class="step"><h3>It reads every new policy</h3><p>Each PDF is checked once against the full list. Pages it can't read, such as scans, are flagged for a look by eye instead of guessed at.</p></div>
+        <div class="step"><h3>Read the claims briefing</h3><p>Claim essentials sit at the top of each policy, red for problems. A briefing is written automatically and saved in a Briefings folder, ready to print or share.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="privacy" id="privacy">
+    <div class="wrap">
+      <div style="display:grid;gap:14px">
+        <span class="eyebrow" style="color:var(--accent-ink);opacity:.8">Privacy</span>
+        <h2>Customer documents never leave your computer</h2>
+      </div>
+      <ul>
+        <li>PDFs are read inside your own browser. Nothing is uploaded to this website or anywhere else.</li>
+        <li>Results and the run log are kept in your browser and in your own Policy Inbox folder.</li>
+        <li>The app never contacts the insurer, the agent or the customer. You decide what to share.</li>
+        <li>An internet connection is only used to load the PDF reader.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap">
+      <div class="box">
+        <div style="display:grid;gap:8px;max-width:34em">
+          <h2>Check your next policy in under a minute</h2>
+          <p class="lede">Open the app, add a policy PDF, and the claim essentials appear straight away.</p>
+        </div>
+        <div class="btns">
+          <a class="btn primary" href="Policy%20Check%20Monitor.html">Open the app</a>
+          <a class="btn ghost" href="https://github.com/nurfaraainsamat10-pixel/policy-check-monitor#readme">Read the guide</a>
+        </div>
+      </div>
+    </div>
   </section>
 </main>
 
-<dialog id="dlgSettings">
-  <h2>Settings</h2>
-  <label>Your name or department (shown on briefings)<br><input type="text" id="setReviewer" style="width:100%"></label>
-  <label>Warn when a policy expires within <input type="number" id="setWarn" min="1" max="365" style="width:70px"> days</label>
-  <div class="sub" style="margin-top:10px">Checks to run</div>
-  <div id="setChecks"></div>
-  <div class="bar" style="justify-content:flex-end;margin-top:14px">
-    <button id="btnSetCancel">Cancel</button><button class="primary" id="btnSetSave">Save</button>
+<footer>
+  <div class="wrap">
+    <span>Policy Check Monitor · An automated check, not legal advice. The insurer's policy wording prevails.</span>
+    <a href="https://github.com/nurfaraainsamat10-pixel/policy-check-monitor">Source on GitHub</a>
   </div>
-</dialog>
+</footer>
 
-<div class="toast" id="toast"></div>
-
-<script>
-/* ---------- Checklist: what every policy must satisfy ---------- */
-const CHECKS = [
-  {id:'waive_betterment', group:'Must-have clauses', label:'Waive Betterment', type:'waiver',
-   patterns:[/waiv\w*\s+(?:of\s+)?(?:the\s+)?betterment/i, /betterment\s+(?:charges?\s+)?(?:is\s+|are\s+)?waived/i, /no\s+betterment/i],
-   related:[/betterment/i],
-   action:'Ask the agent/insurer to add Waive Betterment by endorsement, or get written confirmation that it already applies.'},
-  {id:'voluntary_excess', group:'Must-have clauses', label:'No Voluntary Excess', type:'absent_or_zero',
-   patterns:[/voluntary\s+excess/i, /lebihan\s+sukarela/i],
-   action:'Ask the insurer to remove the voluntary excess, or have Leadership accept it knowingly.'},
-  {id:'windscreen', group:'Core add-ons', label:'Windscreen cover', type:'must_have',
-   patterns:[/wind\s?screen/i, /windshield/i, /cermin\s+(?:hadapan|kenderaan)/i]},
-  {id:'special_perils', group:'Core add-ons', label:'Special Perils (flood, landslide)', type:'must_have',
-   patterns:[/special\s+perils?/i, /convulsion\s+of\s+nature/i, /\bflood\b/i, /landslide/i, /banjir/i, /tanah\s+runtuh/i, /bencana\s+alam/i]},
-  {id:'srcc', group:'Core add-ons', label:'Strike, Riot & Civil Commotion (SRCC)', type:'must_have',
-   patterns:[/strike,?\s*riot/i, /riot\s*(?:&|and)\s*civil\s+commotion/i, /\bSRCC\b/, /rusuhan/i]},
-  {id:'llp', group:'Core add-ons', label:'Legal Liability to Passengers (LLP)', type:'must_have',
-   patterns:[/legal\s+liability\s+to\s+passengers?/i, /\bLLP\b/, /liabiliti\s+undang-undang\s+kepada\s+penumpang/i]},
-  {id:'llan', group:'Core add-ons', label:'Legal Liability of Passengers for Negligent Acts (LLAN)', type:'must_have',
-   patterns:[/legal\s+liability\s+of\s+passengers?/i, /negligent\s+acts?/i, /\bLLAN\b/, /perbuatan\s+cuai/i]},
-  {id:'sum_insured', group:'Money & dates', label:'Sum insured stated', type:'computed'},
-  {id:'excess', group:'Money & dates', label:'Excess amount stated', type:'computed'},
-  {id:'premium_math', group:'Money & dates', label:'Premium + tax = total, same on every page', type:'computed'},
-  {id:'dates', group:'Money & dates', label:'Effective & expiry dates consistent', type:'computed'},
-  {id:'expiry', group:'Money & dates', label:'Policy in force / not expiring soon', type:'computed'},
-];
-const ADDON_ACTION = l => `Ask the agent/insurer to add ${l}, or confirm in writing that it is intentionally left out.`;
-const NEGATION = /(exclud|not\s+cover|does\s+not|shall\s+not|will\s+not\s+pay|tidak\s+(?:dilindungi|termasuk|melindungi)|kecuali)/i;
-
-/* ---------- Storage (browser storage can be unavailable; never crash on it) ---------- */
-const store = {
-  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d }catch{ return d } },
-  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)) }catch{} }
-};
-function idbOpen(){ return new Promise((res, rej) => { const r = indexedDB.open('policy-check-monitor', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error) }) }
-async function idbGet(k){ try{ const db = await idbOpen(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined) }) }catch{ return undefined } }
-async function idbSet(k, v){ try{ const db = await idbOpen(); await new Promise(res => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = res }) }catch{} }
-
-const DEFAULT_SETTINGS = {reviewer:'', expiryWarnDays:30, checks:Object.fromEntries(CHECKS.map(c => [c.id, true]))};
-let settings = Object.assign({}, DEFAULT_SETTINGS, store.get('pcm.settings', {}));
-settings.checks = Object.assign({}, DEFAULT_SETTINGS.checks, settings.checks || {});
-let state = Object.assign({processed:{}, queue:[], history:[], lastRun:null}, store.get('pcm.state', {}));
-let logRows = store.get('pcm.log', []);
-let dirHandle = null, running = false, lastBriefing = null;
-const save = () => store.set('pcm.state', state);
-
-/* ---------- Where we're running: published online (inside the viewer's frame) or opened from disk ---------- */
-const ONLINE = (() => { try{ return window.self !== window.top }catch{ return true } })();
-document.documentElement.classList.toggle('is-online', ONLINE);
-
-/* ---------- Helpers ---------- */
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const pad = n => String(n).padStart(2, '0');
-const fmtDT = iso => { const d = new Date(iso); return `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}` };
-const fmtD = d => `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()}`;
-const stamp = () => { const d = new Date(); return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}` };
-const money = s => parseFloat(String(s).replace(/,/g, ''));
-const rm = n => 'RM ' + n.toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2});
-const parseDate = s => { const m = /(\d{2})[-\/.](\d{2})[-\/.](\d{4})/.exec(s); if(!m) return null; const d = new Date(+m[3], +m[2]-1, +m[1]); return d.getDate() === +m[1] ? d : null };
-function toast(msg){ const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', 4000) }
-async function sha256(buf){ const h = await crypto.subtle.digest('SHA-256', buf); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('') }
-function mode(arr){ const c = new Map(); arr.forEach(v => c.set(v, (c.get(v) || 0) + 1)); let best = null, n = 0; for(const [v, k] of c) if(k > n){ best = v; n = k } return best }
-
-/* ---------- Run log ---------- */
-async function logEvent(run, action, detail, file = ''){
-  const e = {at:new Date().toISOString(), run, action, file, detail};
-  logRows.push(e); logRows = logRows.slice(-3000); store.set('pcm.log', logRows);
-  renderLog();
-  await appendLogToFolder(e);
-}
-const csvCell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-const csvLine = e => [fmtDT(e.at), e.run, e.action, e.file, e.detail].map(csvCell).join(',') + '\r\n';
-async function appendLogToFolder(e){
-  if(!dirHandle) return;
-  try{
-    if(await dirHandle.queryPermission({mode:'readwrite'}) !== 'granted') return;
-    const fh = await dirHandle.getFileHandle('policy-monitor-log.csv', {create:true});
-    const size = (await fh.getFile()).size;
-    const w = await fh.createWritable({keepExistingData:true});
-    await w.seek(size);
-    await w.write((size === 0 ? 'When,Run,Action,File,Detail\r\n' : '') + csvLine(e));
-    await w.close();
-  }catch{ /* folder log is best-effort; the in-app log always has the entry */ }
-}
-
-/* ---------- PDF text extraction ---------- */
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-async function extractPages(buf){
-  const pdf = await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
-  const pages = [];
-  for(let i = 1; i <= pdf.numPages; i++){
-    const tc = await (await pdf.getPage(i)).getTextContent();
-    const rows = [];
-    for(const it of tc.items){
-      if(typeof it.str !== 'string' || !it.str.trim()) continue;
-      const y = it.transform[5], x = it.transform[4];
-      let row = rows.find(r => Math.abs(r.y - y) <= 2.5);
-      if(!row){ row = {y, parts:[]}; rows.push(row) }
-      row.parts.push({x, s:it.str, w:it.width || 0});
-    }
-    rows.sort((a, b) => b.y - a.y);
-    pages.push(rows.map(r => {
-      r.parts.sort((a, b) => a.x - b.x);
-      let out = '', end = null;
-      for(const p of r.parts){ if(end !== null && p.x - end > 1.5) out += '  '; out += p.s; end = p.x + p.w }
-      return out.replace(/\t/g, ' ').replace(/ {3,}/g, '  ').trim();
-    }).filter(Boolean).join('\n'));
-  }
-  return pages;
-}
-
-/* ---------- Analysis ---------- */
-function findAll(pages, re){
-  const out = [], flags = re.flags.includes('g') ? re.flags : re.flags + 'g';
-  pages.forEach((t, i) => { const g = new RegExp(re.source, flags); let m; while((m = g.exec(t))){ out.push({page:i+1, m, idx:m.index, text:t}); if(!m[0]) g.lastIndex++ } });
-  return out;
-}
-function snip(t, idx, len){ const s = Math.max(0, idx - 60), e = Math.min(t.length, idx + len + 90); return (s > 0 ? '…' : '') + t.slice(s, e).replace(/\s+/g, ' ').trim() + (e < t.length ? '…' : '') }
-// Every value found after any matching label, so we can compare them and spot disagreements.
-function valuesAfter(pages, labelRe, valueRe, win){
-  const out = [];
-  for(const h of findAll(pages, labelRe)){
-    const after = h.text.slice(h.idx + h.m[0].length, h.idx + h.m[0].length + win);
-    const v = valueRe.exec(after);
-    if(v) out.push({value:(v[1] ?? v[0]).trim(), page:h.page, label:h.m[0].replace(/\s+/g, ' '), snippet:snip(h.text, h.idx, h.m[0].length + v.index + v[0].length)});
-  }
-  return out;
-}
-const RM_RE = /RM\s*([\d,]+\.\d{2})/;
-const DATE_RE = /(\d{2}[-\/.]\d{2}[-\/.]\d{4})/;
-
-function extractFacts(pages){
-  const all = pages.join('\n');
-  const pick = list => list.length ? mode(list.map(x => x.value)) : null;
-  const insurerM = /([A-Z][A-Za-z&]*(?: [A-Z][A-Za-z&]*){0,4} (?:Insurance|Assurance|Takaful) (?:Malaysia )?(?:Berhad|Bhd\.?))/.exec(all);
-  // Bilingual schedules put the value on the Malay label's row, so labels list both languages
-  // and values must sit on the same row, ending at the next column gap.
-  const SAME_ROW = /^[ :]*,?\s?([^\n]+?)(?=  |\n|$)/;
-  const NOT_A_VALUE = /^(?:-|Sum Insured|Jumlah|Trailer|Treler|No\.)/i;
-  const names = valuesAfter(pages, /(?:Name of Policyholder(?:\s*\/\s*Nama Pemegang Polisi)?|Insured(?:'s)? Name)/i, /^[\s\S]{0,60}?(?:^|\n|:)\s*([A-Z][A-Z .,'@\/-]{5,60})(?=\s*(?:\n|$))/, 120);
-  const regs = valuesAfter(pages, /(?:Vehicle Registration No|Vehicle Registration Number|(?<!Trailer\s)Registration No)\.?/i, /\b([A-Z]{1,3} ?\d{1,4} ?[A-Z]{0,2})\b/, 80);
-  return {
-    insurer: insurerM ? insurerM[1].replace(/\s+/g, ' ') : null,
-    policyNo: pick(valuesAfter(pages, /(?<!Renewal\s)Policy\s*No\.?/i, /\b([A-Z]{1,3}\d{5,}[A-Z0-9]*)\b/, 60).filter(v => !/E\d+$/.test(v.value))),
-    endorsementNo: pick(valuesAfter(pages, /Endorsement\s*No\.?/i, /\b([A-Z]{1,3}\d{5,}E\d+)\b/, 60)),
-    insured: names.length ? names.map(n => n.value).sort((a, b) => b.length - a.length)[0] : null,
-    vehicleReg: pick(regs.filter(r => /\d/.test(r.value))),
-    makeModel: pick(valuesAfter(pages, /(?:Make|Buatan)\s*&\s*Model/i, SAME_ROW, 80).filter(v => /[a-z]/.test(v.value) && !NOT_A_VALUE.test(v.value))),
-    engineNo: pick(valuesAfter(pages, /Engine No\.?|No\. Enjin/i, SAME_ROW, 60).filter(v => /\d/.test(v.value) && /^[A-Z0-9-]{5,}$/.test(v.value))),
-    chassisNo: pick(valuesAfter(pages, /Chas+is No\.?|No\. Casis\s*\/?/i, SAME_ROW, 60).filter(v => /\d/.test(v.value) && /^[A-Z0-9-]{5,}$/.test(v.value))),
-    year: pick(valuesAfter(pages, /Year of Manufacture|Tahun Diperbuat/i, SAME_ROW, 40).filter(v => /^(19|20)\d{2}$/.test(v.value))),
-    drivers: pick(valuesAfter(pages, /Name Drivers|Pemandu Tambahan:?/i, SAME_ROW, 60).filter(v => /[A-Z]{3}/.test(v.value) && !/Sykt|Hire/i.test(v.value))),
-    hirePurchase: pick(valuesAfter(pages, /Hire Purchase:?/i, SAME_ROW, 60).filter(v => v.value.length > 1)),
-    use: pick(valuesAfter(pages, /Kegunaan Kenderaan|Use of Vehicle/i, SAME_ROW, 60).filter(v => /[a-z]/.test(v.value) && !NOT_A_VALUE.test(v.value))),
-    agent: pick(valuesAfter(pages, /Agent Code|Account Number\.?|No Ejen/i, /\b([A-Z]{2,4}\d{4,})\b/, 120)),
-    coverType: (/\[X\]\s*(?:[A-Za-z]+\s*\/\s*)?(Comprehensive|Third Party Fire\s*&\s*Theft|Third Party Only)/i.exec(all) || [])[1] || null,
-    ncd: pick(valuesAfter(pages, /No Claim Discount|\bNCD\b/i, /(\d{1,2}(?:\.\d{1,2})?)\s*%/, 80)),
-    addOns: (pick(valuesAfter(pages, /Additional Benefits|Perlindungan Tambahan/i, /^[ :]*([^\n]*[A-Za-z][^\n]{2,200})/, 220).filter(v => !NOT_A_VALUE.test(v.value) && /RM|\d/.test(v.value))) || '').replace(/^[\s,:]+/, '') || null,
-  };
-}
-
-function clauseCheck(pages, def, unreadable){
-  const hits = [];
-  for(const re of def.patterns) for(const h of findAll(pages, re)) if(!hits.some(x => x.page === h.page && Math.abs(x.idx - h.idx) < 40)) hits.push(h);
-  hits.sort((a, b) => a.page - b.page || a.idx - b.idx);
-  const negated = h => NEGATION.test(h.text.slice(Math.max(0, h.idx - 80), h.idx));
-  const ev = list => list.slice(0, 3).map(h => ({page:h.page, text:snip(h.text, h.idx, h.m[0].length)}));
-  const caveat = unreadable.length ? ` (Page${unreadable.length > 1 ? 's' : ''} ${unreadable.join(', ')} could not be read; see "Unreadable pages".)` : '';
-  const r = {id:def.id, group:def.group, label:def.label};
-
-  if(def.type === 'absent_or_zero'){
-    if(!hits.length) return {...r, status:'ok', finding:'No voluntary excess stated in the documents.' + caveat};
-    const amounts = hits.map(h => { const m = RM_RE.exec(h.text.slice(h.idx, h.idx + 120)); return m ? money(m[1]) : null });
-    if(amounts.some(a => a > 0)) return {...r, status:'flag', finding:`Voluntary excess of ${rm(Math.max(...amounts.filter(a => a != null)))} applies.`, evidence:ev(hits), action:def.action};
-    if(amounts.every(a => a === 0)) return {...r, status:'ok', finding:'Voluntary excess shown as RM 0.00.', evidence:ev(hits)};
-    return {...r, status:'check', finding:'Voluntary excess is mentioned but the amount could not be read.', evidence:ev(hits), action:`Open page ${hits[0].page} and confirm the voluntary excess amount.`};
-  }
-
-  const good = hits.filter(h => !negated(h)), bad = hits.filter(negated);
-  if(good.length){
-    const amt = RM_RE.exec(good[0].text.slice(good[0].idx, good[0].idx + 60));
-    return {...r, status:'ok', amount:amt ? money(amt[1]) : null, finding:`Found on page ${good[0].page}` + (amt ? ` (${rm(money(amt[1]))})` : '') + '.', evidence:ev(good)};
-  }
-  if(bad.length) return {...r, status:'check', finding:`Only mentioned in what looks like an exclusion (page ${bad[0].page}).`, evidence:ev(bad), action:`Open page ${bad[0].page} and confirm whether ${def.label} is covered or excluded.`};
-  if(def.type === 'waiver'){
-    const rel = def.related.flatMap(re => findAll(pages, re));
-    if(rel.length) return {...r, status:'check', finding:`"Betterment" is mentioned on page ${rel[0].page} but no waiver wording was found.`, evidence:ev(rel), action:`Open page ${rel[0].page} and confirm whether betterment is waived.`};
-  }
-  return {...r, status:'flag', finding:'Not found anywhere in the policy documents.' + caveat, action:def.action || ADDON_ACTION(def.label)};
-}
-
-function moneyChecks(pages, facts){
-  const out = [];
-  const sums = valuesAfter(pages, /(?<!Trailer\s)Sum Insured|(?<!Treler\s)Jumlah Di Insuranskan/i, /^[ :]*RM\s*([\d,]+\.\d{2})/, 40).map(v => ({...v, n:money(v.value)}));
-  const si = sums.filter(s => s.n > 0);
-  if(si.length){
-    const vals = [...new Set(si.map(s => s.n))];
-    facts.sumInsured = mode(si.map(s => s.n));
-    out.push(vals.length === 1
-      ? {id:'sum_insured', status:'ok', finding:`Sum insured ${rm(vals[0])}.`, evidence:[{page:si[0].page, text:si[0].snippet}]}
-      : {id:'sum_insured', status:'flag', finding:`Different sums insured shown: ${vals.map(rm).join(' vs ')}.`, evidence:si.map(s => ({page:s.page, text:s.snippet})), action:'Ask the insurer which sum insured is correct and to reissue the wrong document.'});
-  } else out.push({id:'sum_insured', status:'check', finding:'Sum insured could not be found or is RM 0.00.', action:'Open the schedule page and confirm the sum insured.'});
-
-  const ex = valuesAfter(pages, /(?<!Voluntary\s|Compulsory\s)\bExcess\b|\bLebihan\b(?!\s+Sukarela)/i, /^[ :]*RM\s*([\d,]+\.\d{2})/, 40);
-  if(ex.length){ const v = money(mode(ex.map(e => e.value))); facts.excess = v; out.push({id:'excess', status:'info', finding:`Excess stated as ${rm(v)}.` + (v === 0 ? ' No excess applies on own-damage claims (compulsory excesses for young/unnamed drivers may still apply by policy wording).' : ''), evidence:[{page:ex[0].page, text:ex[0].snippet}]}) }
-  else out.push({id:'excess', status:'check', finding:'No excess amount found on the schedule.', action:'Open the schedule page and confirm the excess.'});
-
-  const prem = valuesAfter(pages, /(?:Additional\s+Premium|(?<![A-Za-z]\s?)Premium(?=\s*(?:\/\s*Premium|:)))/i, /^[^\n]{0,30}?(?:\n[^\n]{0,30}?)?(?:RM\s*)?([\d,]+\.\d{2})/, 70);
-  const tax = [], stamp = [];
-  for(const h of findAll(pages, /Service Tax\s*&\s*Stamp Duty/i)){ const m = /RM\s*([\d,]+\.\d{2})\s*&\s*RM\s*([\d,]+\.\d{2})/.exec(h.text.slice(h.idx, h.idx + 120)); if(m){ tax.push(money(m[1])); stamp.push(money(m[2])) } }
-  for(const v of valuesAfter(pages, /Service Tax(?!\s*(?:&|@))(?:\s*\(Cukai Perkhidmatan\))?/i, RM_RE, 40)) tax.push(money(v.value));
-  for(const v of valuesAfter(pages, /Stamp Duty(?!\s*RM\s*[\d,.]+\s*&)/i, /^[\s:]*(?:RM\s*)?([\d,]+\.\d{2})/, 30)) stamp.push(money(v.value));
-  const totals = valuesAfter(pages, /Total(?:\s*\(Jumlah\)|\s+Premium|\s+payable)/i, /^[\s:]*(?:RM\s*)?([\d,]+\.\d{2})/, 30);
-  if(!prem.length || !totals.length){
-    out.push({id:'premium_math', status:'check', finding:'Could not find both the premium and the total payable.', action:'Check the premium and total on the schedule and debit note by eye.'});
-  } else {
-    const P = money(mode(prem.map(p => p.value))), T = tax.length ? mode(tax) : null, S = stamp.length ? mode(stamp) : null;
-    const totalVals = [...new Set(totals.map(t => money(t.value)))];
-    const parts = [`Premium ${rm(P)}`]; if(T != null) parts.push(`tax ${rm(T)}`); if(S != null) parts.push(`stamp duty ${rm(S)}`);
-    const expected = P + (T || 0) + (S || 0);
-    const rate = T != null && P ? ` Service tax is ${(T / P * 100).toFixed(1)}% of premium.` : '';
-    if(totalVals.length > 1) out.push({id:'premium_math', status:'flag', finding:`Different totals shown: ${totalVals.map(rm).join(' vs ')}.`, evidence:totals.map(t => ({page:t.page, text:t.snippet})), action:'Ask the insurer to explain the difference before paying.'});
-    else if(Math.abs(expected - totalVals[0]) > 0.02) out.push({id:'premium_math', status:'flag', finding:`${parts.join(' + ')} = ${rm(expected)}, but total shown is ${rm(totalVals[0])}.`, evidence:totals.map(t => ({page:t.page, text:t.snippet})), action:'Ask the insurer to explain the difference before paying.'});
-    else out.push({id:'premium_math', status:'ok', finding:`${parts.join(' + ')} = ${rm(totalVals[0])}, matches on ${totals.length} page(s).${rate}`});
-    if(T == null) out[out.length - 1].finding += ' (No service tax line found.)';
-  }
-  return out;
-}
-
-function dateChecks(pages, facts){
-  const out = [];
-  const starts = valuesAfter(pages, /(?:End Effective Date|Effective date of Commencement of Insurance|Effective Date|Period of Cover From|Tempoh Perlindungan Dari)/i, DATE_RE, 220);
-  const ends = valuesAfter(pages, /(?:Date of Expiry(?: of Insurance)?|extended to expire[ds]?\s+on|Sehingga Tengahmalam)/i, DATE_RE, 80);
-  for(const h of findAll(pages, /(\d{2}[-\/.]\d{2}[-\/.]\d{4})\s*(?:To|-|hingga|until)\s*(\d{2}[-\/.]\d{2}[-\/.]\d{4})/i)){
-    starts.push({value:h.m[1], page:h.page, label:'Period of cover (start)', snippet:snip(h.text, h.idx, h.m[0].length)});
-    ends.push({value:h.m[2], page:h.page, label:'Period of cover (end)', snippet:snip(h.text, h.idx, h.m[0].length)});
-  }
-  const norm = v => v.replace(/[\/.]/g, '-');
-  const sVals = [...new Set(starts.map(s => norm(s.value)))], eVals = [...new Set(ends.map(e => norm(e.value)))];
-  const odd = (list, common) => list.filter(x => norm(x.value) !== common).map(x => ({page:x.page, text:`${x.label}: ${x.value} — ${x.snippet}`}));
-  if(!starts.length || !ends.length){
-    out.push({id:'dates', status:'check', finding:'Could not find both an effective date and an expiry date.', action:'Check the period of cover by eye.'});
-  } else if(sVals.length > 1 || eVals.length > 1){
-    const sMain = mode(starts.map(s => norm(s.value))), eMain = mode(ends.map(e => norm(e.value)));
-    const bits = [];
-    if(sVals.length > 1) bits.push(`start/effective date shown as ${sVals.join(' and ')}`);
-    if(eVals.length > 1) bits.push(`expiry date shown as ${eVals.join(' and ')}`);
-    out.push({id:'dates', status:'flag', finding:`Documents disagree: ${bits.join('; ')}. Most pages say ${sMain} to ${eMain}.`, evidence:[...odd(starts, sMain), ...odd(ends, eMain)].slice(0, 4), action:'Ask the insurer to confirm the correct dates in writing and reissue the inconsistent document.'});
-  } else out.push({id:'dates', status:'ok', finding:`All pages agree: ${sVals[0]} to ${eVals[0]}.`});
-
-  const end = ends.length ? parseDate(mode(ends.map(e => norm(e.value)))) : null;
-  const start = starts.length ? parseDate(mode(starts.map(s => norm(s.value)))) : null;
-  if(start && end) facts.period = `${fmtD(start)} to ${fmtD(end)}`;
-  if(!end) out.push({id:'expiry', status:'check', finding:'Expiry date not found.', action:'Check the expiry date by eye.'});
-  else {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const days = Math.round((end - today) / 864e5);
-    if(days < 0) out.push({id:'expiry', status:'flag', finding:`Expired on ${fmtD(end)} (${-days} days ago).`, action:'Renew immediately; the vehicle may be uninsured.'});
-    else if(days <= settings.expiryWarnDays) out.push({id:'expiry', status:'check', finding:`Expires on ${fmtD(end)}, in ${days} days.`, action:'Start the renewal now and re-check the new policy against this list.'});
-    else out.push({id:'expiry', status:'ok', finding:`In force until ${fmtD(end)} (${days} days away).` + (start && start > today ? ` Note: this document's cover only starts on ${fmtD(start)}.` : '')});
-  }
-  return out;
-}
-
-function analyse(pages, meta){
-  const unreadable = pages.map((t, i) => t.replace(/\s/g, '').length < 30 ? i + 1 : null).filter(Boolean);
-  const facts = extractFacts(pages);
-  const computed = [...moneyChecks(pages, facts), ...dateChecks(pages, facts)];
-  const results = [];
-  for(const def of CHECKS){
-    if(!settings.checks[def.id]) continue;
-    if(def.type === 'computed'){ const c = computed.find(x => x.id === def.id); if(c) results.push({group:def.group, label:def.label, ...c}) }
-    else results.push(clauseCheck(pages, def, unreadable));
-  }
-  if(unreadable.length){ const pg = `Page${unreadable.length > 1 ? 's' : ''} ${unreadable.join(', ')}`;
-    results.push({id:'unreadable', group:'Document quality', label:'Unreadable pages', status:'check', finding:`${pg} contain${unreadable.length > 1 ? '' : 's'} no readable text (a scanned image or graphic page), so nothing on ${unreadable.length > 1 ? 'them' : 'it'} was checked.`, action:`Open ${pg.toLowerCase()} of the PDF and look for the must-have clauses by eye.`}) }
-  const missing = ['insurer', 'policyNo', 'vehicleReg', 'insured'].filter(k => !facts[k]);
-  if(missing.length) results.push({id:'facts', group:'Document quality', label:'Key details', status:'check', finding:`Could not read: ${missing.map(k => ({insurer:'insurer', policyNo:'policy number', vehicleReg:'vehicle registration', insured:'insured name'}[k])).join(', ')}.`, action:'Fill these in from the PDF before sharing the briefing.'});
-  return {key:meta.hash, file:meta.name, size:meta.size, run:meta.run, checkedAt:new Date().toISOString(), pages:pages.length, unreadable, facts, results};
-}
-
-/* ---------- Run pipeline ---------- */
-const MAX_LISTED = 30;
-function addResult(r){
-  state.queue.unshift(r); state.queue = state.queue.slice(0, MAX_LISTED);
-  state.processed[r.key] = {file:r.file, at:r.checkedAt, run:r.run}; save();
-}
-async function processFile(file, run){
-  const name = file.name;
-  if(!/\.pdf$/i.test(name)){ await logEvent(run, 'Rejected', 'Not a PDF file', name); return 'failed' }
-  if(file.size === 0){ await logEvent(run, 'Rejected', 'File is empty', name); return 'failed' }
-  if(file.size > 50e6){ await logEvent(run, 'Rejected', 'File is larger than 50 MB', name); return 'failed' }
-  const buf = await file.arrayBuffer();
-  if(new TextDecoder().decode(buf.slice(0, 5)) !== '%PDF-'){ await logEvent(run, 'Rejected', 'Not a valid PDF (file header is wrong)', name); return 'failed' }
-  const hash = await sha256(buf);
-  if(state.processed[hash]){ await logEvent(run, 'Skipped', `Already checked on ${fmtDT(state.processed[hash].at)}`, name); return 'skipped' }
-  const manual = (reason) => {
-    addResult({key:hash, file:name, size:file.size, run, checkedAt:new Date().toISOString(), pages:0, unreadable:[], facts:{}, manualOnly:true,
-      results:[{id:'manual', group:'Document quality', label:'Could not be checked automatically', status:'check', finding:reason, action:'Check this document by hand against the checklist.'}]});
-  };
-  let pages;
-  try{ pages = await extractPages(buf) }
-  catch(e){ const msg = e && e.name === 'PasswordException' ? 'PDF is password-protected.' : `PDF could not be opened (${e && e.message || e}).`; await logEvent(run, 'Could not read', msg, name); manual(msg); return 'failed' }
-  const all = pages.join('\n');
-  if(all.replace(/\s/g, '').length < 50){ const msg = 'No readable text in the PDF (probably a scanned image).'; await logEvent(run, 'Could not read', msg, name); manual(msg); return 'failed' }
-  if(!/motor|vehicle|kenderaan|private car|registration no/i.test(all)){ const msg = 'Does not look like a motor insurance policy, so the motor checklist was not applied.'; await logEvent(run, 'Not checked', msg, name); manual(msg); return 'failed' }
-  const result = analyse(pages, {name, hash, size:file.size, run});
-  addResult(result);
-  const c = s => result.results.filter(r => r.status === s).length;
-  await logEvent(run, 'Checked', `${pages.length} pages; ${c('flag')} red, ${c('check')} amber, ${c('ok')} OK${result.unreadable.length ? `; unreadable page(s) ${result.unreadable.join(', ')}` : ''}`, name);
-  return 'checked';
-}
-
-async function runCheck(source, manualFiles){
-  if(running) return;
-  running = true; render();
-  const run = 'R' + stamp();
-  try{
-    let files = [];
-    if(source === 'folder'){
-      if(!dirHandle){ toast('Connect the Policy Inbox folder first.'); return }
-      if(!await ensurePermission(true)){ await logEvent(run, 'Run stopped', 'No permission to read the Policy Inbox folder'); return }
-      await logEvent(run, 'Run started', `Scanning folder "${dirHandle.name}"`);
-      let other = 0;
-      for await (const [name, h] of dirHandle.entries()){
-        if(h.kind !== 'file') continue;
-        if(/\.pdf$/i.test(name)) files.push(await h.getFile());
-        else if(!/^policy-monitor-log\.csv$/i.test(name)) other++;
-      }
-      if(other) await logEvent(run, 'Ignored', `${other} non-PDF file(s) in the folder`);
-    } else {
-      files = [...manualFiles];
-      await logEvent(run, 'Run started', `${files.length} file(s) added manually`);
-    }
-    let checked = 0, skipped = 0, failed = 0;
-    for(const f of files){
-      let r; try{ r = await processFile(f, run) }catch(e){ await logEvent(run, 'Error', String(e && e.message || e), f.name); r = 'failed' }
-      r === 'checked' ? checked++ : r === 'skipped' ? skipped++ : failed++;
-    }
-    state.lastRun = {at:new Date().toISOString(), run, checked, skipped, failed}; save();
-    await logEvent(run, 'Run finished', files.length ? `${checked} new policy file(s) checked, ${skipped} already checked before, ${failed} need manual handling` : 'No PDF files found');
-    const fresh = state.queue.filter(q => q.run === run);
-    if(fresh.length){ await autoBriefing(fresh, run); toast(`${fresh.length} new file(s) checked; briefing ready.`) }
-  }catch(e){ await logEvent(run, 'Run error', String(e && e.message || e)) }
-  finally{ running = false; render() }
-}
-
-/* ---------- Folder connection ---------- */
-async function ensurePermission(ask){
-  if(!dirHandle) return false;
-  try{
-    if(await dirHandle.queryPermission({mode:'readwrite'}) === 'granted') return true;
-    return ask && await dirHandle.requestPermission({mode:'readwrite'}) === 'granted';
-  }catch{ return false }
-}
-async function connectInbox(){
-  if(!window.showDirectoryPicker){ toast('This browser cannot watch a folder. Open this app in Microsoft Edge or Google Chrome, or add PDFs manually.'); return }
-  try{
-    dirHandle = await window.showDirectoryPicker({id:'policy-inbox', mode:'readwrite'});
-    await idbSet('inbox', dirHandle);
-    await logEvent('-', 'Inbox connected', `Folder "${dirHandle.name}"`);
-    await runCheck('folder');
-  }catch(e){ if(e.name !== 'AbortError') toast('Could not connect the folder: ' + e.message) }
-}
-
-/* ---------- Claim essentials (what a workshop claims desk needs first) ---------- */
-// Standard Malaysian motor betterment scale: vehicle age in years -> % of new-parts cost borne by the customer.
-const BETTERMENT_SCALE = [[10, 40], [9, 35], [8, 30], [7, 25], [6, 20], [5, 15]];
-const isIssue = r => r.status === 'flag' || r.status === 'check';
-function claimEssentials(q){
-  const f = q.facts || {}, R = id => q.results.find(r => r.id === id) || {};
-  const out = [];
-  const add = (label, value, tone, note = '') => out.push({label, value:value || 'Not found', tone:value ? tone : 'warn', note:value ? note : 'Not found in the documents; check the PDF.'});
-  const comp = /comprehensive/i.test(f.coverType || '');
-  add('Cover type', f.coverType, comp ? 'good' : 'bad', comp ? 'Own-damage repair claim allowed' : 'Third-party cover: no own-damage repair claim on this policy');
-
-  const exp = R('expiry'), dates = R('dates');
-  const pTone = exp.status === 'flag' || dates.status === 'flag' ? 'bad' : exp.status === 'ok' && dates.status === 'ok' ? 'good' : 'warn';
-  add('Period of cover', f.period, pTone, [dates.status === 'flag' ? 'Dates differ between pages: confirm with insurer before accepting the claim.' : '', exp.finding || ''].filter(Boolean).join(' ') + ' Accident date must fall inside this period.');
-
-  const wb = R('waive_betterment');
-  const age = f.year ? new Date().getFullYear() - +f.year : null;
-  const pct = age == null ? null : (BETTERMENT_SCALE.find(([a]) => age >= a) || [0, 0])[1];
-  if(wb.status === 'ok') add('Betterment', 'Waived', 'good', 'Customer does not pay betterment on new parts.');
-  else if(!wb.status) add('Betterment', null, 'warn');
-  else add('Betterment', pct ? `Not waived: ~${pct}% of parts` : 'Not waived', pct ? 'bad' : wb.status === 'check' ? 'warn' : 'good',
-    age == null ? 'Vehicle age unknown, so the betterment rate could not be worked out.' : pct ? `Vehicle is ${age} years old (${f.year}). Customer pays about ${pct}% of new-parts cost unless waived.` : `Vehicle is ${age} years old: under 5 years, so no betterment applies yet.`);
-
-  const ve = R('voluntary_excess');
-  const exTone = ve.status === 'flag' ? 'bad' : f.excess === 0 && ve.status === 'ok' ? 'good' : 'warn';
-  add('Excess customer pays', f.excess != null ? rm(f.excess) + (ve.status === 'flag' ? ' + voluntary' : '') : null, exTone,
-    (ve.status === 'flag' ? ve.finding + ' ' : 'No voluntary excess. ') + 'Compulsory excess (e.g. RM400 for young/unnamed driver) may still apply.');
-
-  add('Sum insured', f.sumInsured ? rm(f.sumInsured) : null, 'neutral', 'Maximum payable; reference for total-loss cases.');
-
-  const ws = R('windscreen');
-  if(ws.status) add('Windscreen', ws.status === 'ok' ? (ws.amount ? rm(ws.amount) : 'Covered') : 'Not covered', ws.status === 'ok' ? 'good' : 'bad', ws.status === 'ok' ? 'Windscreen-only claim does not affect NCD.' : 'Windscreen damage is not claimable on its own.');
-  const sp = R('special_perils');
-  if(sp.status) add('Flood / special perils', sp.status === 'ok' ? 'Covered' : 'Not covered', sp.status === 'ok' ? 'good' : 'bad', sp.status === 'ok' ? '' : 'Flood, storm or landslide damage is NOT claimable.');
-
-  add('NCD', f.ncd ? f.ncd + '%' : null, 'neutral', 'An own-damage claim normally resets NCD to 0% at renewal; tell the customer.');
-  add('Authorised drivers', f.drivers, /any|all/i.test(f.drivers || '') ? 'good' : 'warn', 'Confirm the driver at the time of accident is allowed and licensed.');
-  add('Vehicle to verify', [f.vehicleReg, f.makeModel, f.year].filter(Boolean).join(' · ') || null, 'neutral', `Engine ${f.engineNo || 'not found'} · Chassis ${f.chassisNo || 'not found'}: match against the car.`);
-  add('Use of vehicle', f.use, 'neutral', 'Not covered if used for hire, reward or e-hailing unless endorsed.');
-  add('Financier (hire purchase)', f.hirePurchase, 'neutral', /not applicable|^-$/i.test(f.hirePurchase || '') ? 'No financier: settlement goes to the insured.' : 'Financier must be named on any total-loss payment.');
-  add('Insurer · policy', [f.insurer, f.policyNo].filter(Boolean).join(' · ') || null, 'neutral', [f.endorsementNo ? `Endorsement ${f.endorsementNo}` : '', f.agent ? `Agent ${f.agent}` : ''].filter(Boolean).join(' · '));
-  return out;
-}
-// Short phrase per serious claim issue, for the bottom line.
-function claimHeadlines(q){
-  return claimEssentials(q).filter(e => e.tone === 'bad').map(e => `${e.label}: ${e.value}`);
-}
-
-/* ---------- Briefing ---------- */
-const STATUS_LABEL = {flag:'Action needed', check:'Check', ok:'OK', info:'Info'};
-function vehicleName(q){ const f = q.facts || {}; return [f.makeModel, f.vehicleReg ? `(${f.vehicleReg})` : ''].filter(Boolean).join(' ') || q.file }
-function buildBriefing(items, opt){
-  // The "Unreadable pages" row already says this once; don't repeat it on every line of the briefing.
-  items = items.map(q => ({...q, results:q.results.map(r => ({...r, finding:r.finding.replace(/ \(Pages? [\d, ]+ could not be read; see "Unreadable pages"\.\)/, '')}))}));
-  const actionItems = [];
-  const rag = items.map(q => {
-    const open = q.results.filter(isIssue);
-    open.forEach(r => actionItems.push({q, r}));
-    return open.some(r => r.status === 'flag') ? 'red' : open.length ? 'amber' : 'green';
-  });
-  const nRed = rag.filter(x => x === 'red').length, nAmber = rag.filter(x => x === 'amber').length, nGreen = rag.filter(x => x === 'green').length;
-  const when = new Date(opt.at || Date.now());
-  const headlines = items.filter(q => !q.manualOnly).map(q => ({v:vehicleName(q), h:claimHeadlines(q)})).filter(x => x.h.length);
-  const bottom = `${items.length} policy document${items.length === 1 ? '' : 's'} checked. ` +
-    (nRed ? `${nRed} need${nRed === 1 ? 's' : ''} action` : 'None need urgent action') +
-    (nAmber ? `, ${nAmber} need${nAmber === 1 ? 's' : ''} a quick check` : '') + (nGreen ? `, ${nGreen} fully in order` : '') + '.' +
-    (headlines.length ? ` For claims: ${headlines.map(x => `${x.v}: ${x.h.join('; ')}`).join('. ')}.` : '');
-  const pill = s => `<span class="p ${s}">${STATUS_LABEL[s]}</span>`;
-  const policyBlocks = items.map((q, i) => {
-    const f = q.facts || {};
-    const rows = q.results.map(r => `<tr><td>${esc(r.label)}</td><td>${pill(r.status)}</td><td>${esc(r.finding)}${r.evidence && r.evidence[0] && r.status !== 'ok' ? `<div class="n">Source p.${r.evidence[0].page}: “${esc(r.evidence[0].text.slice(0, 160))}”</div>` : ''}</td></tr>`).join('');
-    const ess = q.manualOnly ? '' : `<div class="ess-t">Claim essentials</div><div class="ess">${claimEssentials(q).map(e => `<div class="tile ${e.tone}"><div class="l">${esc(e.label)}</div><div class="v">${esc(e.value)}</div>${e.note ? `<div class="tn">${esc(e.note)}</div>` : ''}</div>`).join('')}</div>`;
-    return `<div class="pol"><h3><span class="dot ${rag[i]}"></span>${esc(vehicleName(q))}</h3>
-      <div class="ins">Insured: <b>${esc(f.insured || 'not found')}</b>${f.addOns ? ` · Add-ons listed: <b>${esc(f.addOns)}</b>` : ''}</div>
-      ${ess}
-      <div class="ess-t">Full checklist</div>
-      <table><thead><tr><th style="width:28%">Check</th><th style="width:13%">Result</th><th>Finding</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="src">Source: ${esc(q.file)} · ${q.pages} pages · checked ${fmtDT(q.checkedAt)} · file ID ${esc(q.key.slice(0, 12))}</div></div>`;
-  }).join('');
-  const actions = actionItems.length
-    ? `<ol>${actionItems.sort((a, b) => (a.r.status === 'flag' ? 0 : 1) - (b.r.status === 'flag' ? 0 : 1)).map(({q, r}) => `<li><b>${esc(vehicleName(q))} — ${esc(r.label)}.</b> ${esc(r.finding)} <i>${esc(r.action || '')}</i></li>`).join('')}</ol>`
-    : '<p>No actions needed.</p>';
-  const status = `Generated automatically on ${fmtDT(when.toISOString())}${settings.reviewer ? ` for ${esc(settings.reviewer)}` : ''}. Not reviewed by a person.`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Insurance Policy Check: Claims Briefing ${fmtD(when)}</title>
-<style>
-body{font:13px/1.45 "Segoe UI",Arial,sans-serif;color:#1b2430;background:#fff;margin:0;padding:28px 34px;max-width:900px}
-h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:22px 0 8px;text-transform:uppercase;letter-spacing:.04em;color:#1f4e8c}
-h3{font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
-.meta{color:#5d6878;font-size:12px}.status{margin-top:6px;font-size:12px;padding:4px 8px;display:inline-block;border-radius:4px;background:#eaf0f8;color:#3b5b85}
-.ins{font-size:12.5px;margin-bottom:8px}.ess-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1f4e8c;margin:10px 0 6px}
-.ess{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.tile{border:1px solid #dfe3e9;border-left:5px solid #3b5b85;border-radius:5px;padding:6px 8px}.tile .l{font-size:10.5px;color:#5d6878}.tile .v{font-size:14px;font-weight:700;margin:1px 0}.tile .tn{font-size:10.5px;color:#5d6878}
-.tile.good{border-left-color:#1e7a3c}.tile.good .v{color:#1e7a3c}.tile.bad{border-left-color:#b42318;background:#fdecea}.tile.bad .v{color:#b42318}.tile.warn{border-left-color:#e09a1a;background:#fff4e0}.tile.warn .v{color:#9a5b00}
-@media (max-width:640px){.ess{grid-template-columns:1fr 1fr}body{padding:16px}}
-.bl{font-size:14.5px;background:#f5f6f8;border-left:4px solid #1f4e8c;padding:10px 14px;margin:0}
-.kpi{display:flex;gap:10px;margin:10px 0 0}.kpi div{flex:1;border:1px solid #dfe3e9;border-radius:6px;padding:8px 10px}.kpi b{font-size:20px;display:block}
-ol{padding-left:20px;margin:0}li{margin-bottom:6px}li i{color:#3b5b85;font-style:normal;display:block}
-.pol{border:1px solid #dfe3e9;border-radius:6px;padding:14px;margin-bottom:14px;page-break-inside:avoid}
-.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 14px;margin-bottom:10px}.facts span{display:block;color:#5d6878;font-size:11px}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 6px;border-bottom:1px solid #eceff3;vertical-align:top}th{font-size:11px;color:#5d6878}
-.p{font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;white-space:nowrap}.p.flag{color:#b42318;background:#fdecea}.p.check{color:#9a5b00;background:#fff4e0}.p.ok{color:#1e7a3c;background:#e7f5ec}.p.info{color:#3b5b85;background:#eaf0f8}
-.n{color:#5d6878;font-size:11.5px;margin-top:2px}.cl td{color:#8a94a3}
-.dot{width:11px;height:11px;border-radius:50%;display:inline-block}.dot.red{background:#b42318}.dot.amber{background:#e09a1a}.dot.green{background:#1e7a3c}
-.src{color:#8a94a3;font-size:11px;margin-top:8px}.foot{color:#8a94a3;font-size:11px;margin-top:20px;border-top:1px solid #eceff3;padding-top:8px}
-@media print{body{padding:0}}
-</style></head><body>
-<h1>Insurance Policy Check: Claims Briefing</h1>
-<div class="meta">${fmtD(when)} · Prepared by Policy Check Monitor</div>
-<div class="status">${status}</div>
-<h2>Bottom line</h2><p class="bl">${esc(bottom)}</p>
-<div class="kpi"><div><b style="color:#b42318">${nRed}</b>Need action</div><div><b style="color:#9a5b00">${nAmber}</b>Need a check</div><div><b style="color:#1e7a3c">${nGreen}</b>In order</div></div>
-<h2>Actions</h2>${actions}
-<h2>Policy detail</h2>${policyBlocks}
-<div class="foot">Scope: automated reading of the policy documents supplied, against the checklist (Waive Betterment, no Voluntary Excess, Windscreen, Special Perils, SRCC, LLP, LLAN, sums, premium and dates). Generated automatically without human review. Betterment rates use the standard Malaysian scale and are estimates; the insurer's assessment is final. A clause is reported as missing when its wording does not appear in the documents; the insurer's full policy wording prevails. This is not legal advice.</div>
-</body></html>`;
-}
-// Shown in a shadow root so the briefing's own styles don't leak into the app (online viewers can't embed frames).
-function showBriefing(html){
-  lastBriefing = html;
-  const view = $('briefView'), root = view.shadowRoot || view.attachShadow({mode:'open'});
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const css = [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n').replace(/\bbody\{/g, '.bd{');
-  root.innerHTML = `<style>${css}</style><div class="bd">${doc.body.innerHTML}</div>`;
-  $('briefWrap').hidden = false; $('btnPrint').disabled = false; $('btnDownload').disabled = false;
-}
-function printBriefing(){
-  if(!lastBriefing) return;
-  const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;width:0;height:0;border:0';
-  f.onload = () => { f.contentWindow.print(); setTimeout(() => f.remove(), 60000) };
-  f.srcdoc = lastBriefing; document.body.appendChild(f);
-}
-// Online, files go through the viewer's save prompt; locally, a normal browser download.
-async function saveFile(filename, data, type){
-  if(ONLINE){
-    const dl = window.claude && await window.claude.use('downloads');
-    if(!dl){ toast('Saving files is not available in this view.'); return }
-    try{ await dl.save({filename, data}); toast('Saved ' + filename) }
-    catch(e){ if(e && e.code !== 'declined') toast('Could not save: ' + (e.message || e.code)) }
-    return;
-  }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], {type})); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-}
-function downloadBriefing(){ if(lastBriefing) saveFile(`Policy-briefing-${stamp()}.html`, lastBriefing, 'text/html') }
-
-// Runs after every check that found new files: writes the briefing and keeps a copy in history.
-async function autoBriefing(items, run){
-  const at = new Date().toISOString();
-  const html = buildBriefing(items, {at});
-  const fname = `Policy-briefing-${stamp()}.html`;
-  let savedTo = 'not saved to a folder (inbox not connected; use Download)';
-  if(dirHandle && await ensurePermission(false)){
-    try{ const d = await dirHandle.getDirectoryHandle('Briefings', {create:true}); const w = await (await d.getFileHandle(fname, {create:true})).createWritable(); await w.write(html); await w.close(); savedTo = `saved as Briefings/${fname}` }
-    catch(e){ savedTo = 'could not save to folder: ' + e.message }
-  }
-  state.history.unshift({at, file:fname, policies:items.map(q => ({file:q.file, vehicle:vehicleName(q)})), html});
-  state.history = state.history.slice(0, 30); save();
-  await logEvent(run, 'Briefing generated', `${items.length} policy file(s); ${savedTo}`);
-  showBriefing(html);
-}
-
-/* ---------- Rendering ---------- */
-function render(){
-  const last = state.lastRun;
-  const connected = !!dirHandle;
-  $('statusLine').innerHTML = `
-    <div class="local-only">Inbox: <b>${connected ? esc(dirHandle.name) : 'not connected'}</b></div>
-    <div>Last check: <b>${last ? fmtDT(last.at) : 'never'}</b>${last ? ` (${last.checked} new, ${last.skipped} already done, ${last.failed} manual)` : ''}</div>
-    <div>Policies listed: <b>${state.queue.length}</b></div>
-    <div>${running ? '<b>Checking…</b>' : connected ? 'Re-checks the inbox every 30 minutes while open' : ''}</div>`;
-  $('btnRun').disabled = running || !connected;
-  $('btnConnect').textContent = connected ? 'Change inbox folder' : 'Connect Policy Inbox folder';
-
-  $('queue').innerHTML = state.queue.length ? state.queue.map(q => {
-    const reds = q.results.filter(r => r.status === 'flag').length, ambers = q.results.filter(r => r.status === 'check').length;
-    const rows = q.results.map(r => {
-      const ev = (r.evidence || []).map(e => `<div class="ev">p.${e.page}: ${esc(e.text)}</div>`).join('');
-      return `<tr><td>${esc(r.label)}<div class="sub">${esc(r.group)}</div></td><td><span class="pill ${r.status}">${STATUS_LABEL[r.status]}</span></td>
-        <td>${esc(r.finding)}${r.action && isIssue(r) ? `<div class="sub">Suggested: ${esc(r.action)}</div>` : ''}${ev ? `<details><summary>Show where in the PDF</summary>${ev}</details>` : ''}</td></tr>`;
-    }).join('');
-    const f = q.facts || {};
-    const ess = q.manualOnly ? '' : `<div class="ess-h">Claim essentials</div><div class="ess">${claimEssentials(q).map(e => `<div class="tile ${e.tone}"><div class="l">${esc(e.label)}</div><div class="v">${esc(e.value)}</div>${e.note ? `<div class="n">${esc(e.note)}</div>` : ''}</div>`).join('')}</div>`;
-    return `<div class="card"><div class="card-head"><div><div class="t">${esc(vehicleName(q))}</div><div class="sub">${esc(f.insured || '')}${f.insured ? ' · ' : ''}${esc(q.file)} · checked ${fmtDT(q.checkedAt)}</div></div>
-      <div><span class="pill flag">${reds} red</span> <span class="pill check">${ambers} amber</span></div></div>
-      ${ess}
-      <details style="padding:10px 14px"><summary>Full checklist (${q.results.length} checks)</summary>
-      <div class="scroll"><table><thead><tr><th style="width:28%">Check</th><th>Result</th><th>Finding</th></tr></thead><tbody>${rows}</tbody></table></div></details></div>`;
-  }).join('') : '<div class="empty">No policies yet. PDFs dropped into the inbox appear here after the next check.</div>';
-
-  $('history').innerHTML = state.history.length ? `<table><thead><tr><th>Generated</th><th>Policies</th><th></th></tr></thead><tbody>${state.history.map((h, i) => `<tr><td>${fmtDT(h.at)}</td><td>${h.policies.map(p => esc(p.vehicle)).join('<br>')}</td><td><button class="small" data-h="${i}">Open</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty">No briefings yet.</div>';
-  renderLog();
-}
-function renderLog(){
-  $('logBody').innerHTML = logRows.slice(-200).reverse().map(e => `<tr><td style="white-space:nowrap">${fmtDT(e.at)}</td><td>${esc(e.run)}</td><td>${esc(e.action)}</td><td>${esc(e.file)}</td><td>${esc(e.detail)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No activity yet.</td></tr>';
-}
-
-/* ---------- Settings ---------- */
-function openSettings(){
-  $('setReviewer').value = settings.reviewer; $('setWarn').value = settings.expiryWarnDays;
-  $('setChecks').innerHTML = CHECKS.map(c => `<label><input type="checkbox" data-c="${c.id}" ${settings.checks[c.id] ? 'checked' : ''}> ${esc(c.label)} <span class="sub">(${esc(c.group)})</span></label>`).join('');
-  $('dlgSettings').showModal();
-}
-async function saveSettings(){
-  const before = JSON.stringify(settings);
-  settings.reviewer = $('setReviewer').value.trim();
-  const w = parseInt($('setWarn').value, 10); settings.expiryWarnDays = w >= 1 && w <= 365 ? w : 30;
-  document.querySelectorAll('[data-c]').forEach(cb => settings.checks[cb.dataset.c] = cb.checked);
-  store.set('pcm.settings', settings);
-  $('dlgSettings').close();
-  if(JSON.stringify(settings) !== before) await logEvent('-', 'Settings changed', `Reviewer "${settings.reviewer}", warn ${settings.expiryWarnDays} days, checks off: ${CHECKS.filter(c => !settings.checks[c.id]).map(c => c.label).join(', ') || 'none'}`);
-  render();
-}
-
-/* ---------- Wiring ---------- */
-$('btnConnect').onclick = connectInbox;
-$('btnRun').onclick = () => runCheck('folder');
-$('btnAdd').onclick = () => $('filePick').click();
-$('filePick').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; if(fs.length) runCheck('manual', fs) };
-$('btnSettings').onclick = openSettings;
-$('btnSetCancel').onclick = () => $('dlgSettings').close();
-$('btnSetSave').onclick = saveSettings;
-$('btnPreview').onclick = () => { if(!state.queue.length){ toast('No policies checked yet.'); return } showBriefing(buildBriefing(state.queue, {})) };
-$('btnPrint').onclick = printBriefing;
-$('btnDownload').onclick = downloadBriefing;
-$('btnExportLog').onclick = () => saveFile(`policy-monitor-log-${stamp()}.csv`, 'When,Run,Action,File,Detail\r\n' + logRows.map(csvLine).join(''), 'text/csv');
-document.addEventListener('click', e => {
-  const h = e.target.closest('button[data-h]'); if(h) showBriefing(state.history[+h.dataset.h].html);
-});
-const drop = $('drop');
-['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over') }));
-['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over') }));
-drop.addEventListener('drop', e => { const fs = [...e.dataTransfer.files]; if(fs.length) runCheck('manual', fs) });
-
-window.PolicyMonitor = {runCheck, buildBriefing, state:() => state, log:() => logRows};
-
-(async function init(){
-  if(typeof pdfjsLib === 'undefined'){ const b = $('banner'); b.textContent = 'The PDF reader could not load. Check your internet connection and reload this page.'; b.style.display = 'block' }
-  if(ONLINE){ render(); if(state.history[0]) showBriefing(state.history[0].html); return }
-  dirHandle = await idbGet('inbox') || null;
-  render();
-  if(dirHandle){
-    if(await ensurePermission(false)) runCheck('folder');
-    else { const b = $('banner'); b.innerHTML = 'Click <b>Check inbox now</b> and allow access to run today\'s check.'; b.style.display = 'block'; $('btnRun').addEventListener('click', () => b.style.display = 'none', {once:true}) }
-  }
-  setInterval(async () => { if(dirHandle && !running && await ensurePermission(false)) runCheck('folder') }, 30 * 60 * 1000);
-})();
-</script>
 </body>
 </html>
