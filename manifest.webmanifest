@@ -1,0 +1,14 @@
+{
+  "name": "Policy Check Monitor",
+  "short_name": "Policy Check",
+  "description": "Checks motor insurance policy PDFs and highlights claim essentials for workshop claims.",
+  "start_url": "Policy%20Check%20Monitor.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#1d4f91",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
