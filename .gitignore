@@ -1,0 +1,8 @@
+# Customer policy documents and anything generated from them contain personal data.
+# They must never be committed.
+*.pdf
+Policy Inbox/
+Briefings/
+Test run/
+policy-monitor-log*.csv
+Policy-briefing-*.html
